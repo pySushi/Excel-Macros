@@ -1,0 +1,151 @@
+Public Function GetLength(a As Variant) As Integer
+   If IsEmpty(a) Then
+      GetLength = 0
+   Else
+      GetLength = UBound(a) - LBound(a) + 1
+   End If
+End Function
+
+Function doShapesOverlap(Shp1 As Shape, Shps As ShapeRange) As Boolean
+    Dim Shp2 As Shape
+    Dim hasOverlap As Boolean
+    
+    hasOverlap = False
+    
+    For Each Shp2 In Shps
+        ' Not Outside
+        If Not ((Shp1.Left + Shp1.Width < Shp2.Left) Or (Shp1.Left > Shp2.Left + Shp2.Width) Or (Shp1.Top + Shp1.Height < Shp2.Top) Or (Shp1.Top > Shp2.Top + Shp2.Height)) Then
+            hasOverlap = True
+            Exit For
+        End If
+    Next Shp2
+    
+    doShapesOverlap = hasOverlap
+End Function
+
+Sub createWordCloud()
+    Dim rng As Range
+    Dim ws As Worksheet
+    
+    Set rng = Selection
+    
+    Dim idx, cnt As Variant
+    cnt = rng.Rows.Count
+    
+    Dim maxValue, minValue As Variant
+    maxValue = rng.Cells(2, 2).Value
+    minValue = rng.Cells(cnt, 2).Value
+    
+    Set ws = ActiveSheet
+    For idx = 1 To cnt
+        With ws.Shapes
+            .AddTextbox(Orientation:=msoTextOrientationHorizontal, Left:=200, Top:=80, Width:=120, Height:=40).Name = "Shape" & CStr(idx)
+        End With
+        With ws.Shapes("Shape" & CStr(idx)).TextFrame
+            .MarginLeft = 0
+            .MarginBottom = 0
+            .MarginTop = 0
+            .MarginRight = 0
+            .AutoSize = True
+            .Orientation = msoTextOrientationHorizontal
+            .Characters.Font.Color = xlThemeColorAccent3
+            .Characters.Font.Size = 32 * (rng.Cells(idx + 1, 2).Value - minValue) / (maxValue - minValue) + 8
+            .Characters.Font.Name = "Calibri Light"
+            .Characters.Font.Bold = msoTrue
+        End With
+        With ws.Shapes("Shape" & CStr(idx)).TextFrame2
+            .WordWrap = False
+            With .TextRange
+                .Text = rng.Cells(idx + 1, 1).Value
+                .Font.Spacing = -1 * (rng.Cells(idx + 1, 2).Value - minValue) / (maxValue - minValue)
+            End With
+        End With
+        ws.Shapes("Shape" & CStr(idx)).Line.Transparency = 1
+        ws.Shapes("Shape" & CStr(idx)).Fill.Transparency = 1
+                
+        Dim sign
+        sign = 1
+        If idx Mod 2 = 0 Then
+            sign = -1
+        End If
+        
+        ' Right top align
+        With ws.Shapes("Shape" & CStr(idx))
+            If idx > 1 Then
+                .Left = ws.Shapes("Shape1").Left + ws.Shapes("Shape1").Width / 2 - .Width / 2 + sign * Rnd * .Width / 2
+                .Top = ws.Shapes("Shape1").Top + ws.Shapes("Shape1").Height / 2 - .Height / 2
+            End If
+        End With
+        
+        If nameString = "" Then
+            nameString = "Shape" & CStr(idx)
+        Else
+            nameString = nameString & "|" & "Shape" & CStr(idx)
+        End If
+    Next idx
+    
+    Dim centerX, centerY
+    
+    centerX = ws.Shapes("Shape1").Left + ws.Shapes("Shape1").Width / 2
+    centerY = ws.Shapes("Shape1").Top + ws.Shapes("Shape1").Height / 2
+    
+    Dim PI, b
+    
+    PI = 3.14159265358979
+    b = 4 ' Set a fixed spiral width: Distance between successive turns
+
+    Dim r, phi
+    Dim midX, midY
+    Dim newMidX, newMidY
+    
+    Dim shapeArray() As String
+    shapeArray = Split(nameString, "|")
+    
+    ' Reposition shape with idx2
+    For idx2 = 2 To cnt
+        ' Calculate mid of rect
+        midX = ws.Shapes("Shape" & CStr(idx2)).Left + ws.Shapes("Shape" & CStr(idx2)).Width / 2
+        midY = ws.Shapes("Shape" & CStr(idx2)).Top + ws.Shapes("Shape" & CStr(idx2)).Height / 2
+        
+        ' Calculate radius from center
+        r = Math.Sqr((midX - centerX) ^ 2 + (midY - centerY) ^ 2)
+        phi = (2 * PI * r) / b
+        
+        ' create dummy shape
+        With ws.Shapes
+            .AddTextbox(Orientation:=msoTextOrientationHorizontal, _
+                Left:=ws.Shapes("Shape" & CStr(idx2)).Left, _
+                Top:=ws.Shapes("Shape" & CStr(idx2)).Top, _
+                Width:=ws.Shapes("Shape" & CStr(idx2)).Width, _
+                Height:=ws.Shapes("Shape" & CStr(idx2)).Height).Name = "ShapeTemp"
+        End With
+        
+        ' Perform a spiral movement from center using the archimedean spiral and polar coordinates
+        counter = 0
+        Do While doShapesOverlap(ws.Shapes("ShapeTemp"), ws.Shapes.Range(shapeArray))
+            ' Increase that angle and calculate new radius
+            phi = phi + PI / 24
+            r = (b * phi) / (2 * PI)
+            
+            ' Convert back to cartesian coordinates
+            newMidX = r * Math.Cos(phi)
+            newMidY = r * Math.Sin(phi)
+            
+            ' Apply movement
+            ws.Shapes("ShapeTemp").Left = newMidX + centerX
+            ws.Shapes("ShapeTemp").Top = newMidY + centerY
+        Loop
+        
+        ws.Shapes("Shape" & CStr(idx2)).Left = ws.Shapes("ShapeTemp").Left
+        ws.Shapes("Shape" & CStr(idx2)).Top = ws.Shapes("ShapeTemp").Top
+        ws.Shapes("ShapeTemp").Delete
+        
+    Next idx2
+
+    With ws.Shapes.Range(shapeArray).Group
+        .ZOrder msoBringToFront
+        .Left = 160
+        .Top = 80
+    End With
+
+End Sub
